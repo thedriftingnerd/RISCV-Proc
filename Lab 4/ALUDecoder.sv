@@ -4,11 +4,6 @@ module ALUDecoder(
     input [2:0] funct3, 
     output reg [2:0] alu_ctrl
 );
-module ALUDecoder(
-    input [6:0] opcode, 
-    input [2:0] funct3, 
-    output reg [2:0] alu_ctrl
-);
     always @(*) begin
         case (opcode)
             7'b0010011: begin // I-type ALU Instructions
