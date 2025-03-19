@@ -2,23 +2,65 @@
 module ALU(
     input [31:0] op1,
     input [31:0] op2,
-    input [2:0] alu_ctrl,
+    input [2:0] funct3,
+    input [6:0] funct7,
+    input [4:0] shamt,
+    input [2:0] insn_type,
     output reg [31:0] result
 );
-    always @(*) begin
-        case (alu_ctrl)
-            3'b000: result = op1 + op2; // ADDI
-            3'b001: result = op1 ^ op2; // XORI
-            3'b010: result = op1 | op2; // ORI
-            3'b011: result = op1 & op2; // ANDI
-            3'b100: result = op1 << op2[4:0]; // SLLI 
-            3'b101: begin
-                if (op2[10]) // Check bit 10 for SRAI vs. SRLI
-                    result = $signed(op1) >>> op2[4:0]; // SRAI 
-                else
-                    result = op1 >> op2[4:0]; // SRLI 
+    always @ (*) begin
+        case (insn_type)
+            3'b000: begin
+                case (funct3)
+                    // ADDI
+                    3'b000: result = op1 + op2; 
+                    // SLTI
+                    3'b010: begin
+                        if ($signed(op1) < $signed(op2)) begin
+                            result = 1;
+                        end
+                        else begin
+                            result = 0;
+                        end
+                    end
+                    // SLTIU
+                    3'b011: begin
+                        if (op1 < op2) begin
+                            result = 1;
+                        end
+                        else begin
+                            result = 0;
+                        end
+                    end
+                    // XORI
+                    3'b100: result = op1 ^ op2; 
+                    // ORI
+                    3'b110: result = op1 | op2;
+                    // ANDI
+                    3'b111: result = op1 & op2;
+                    // SLLI 
+                    3'b001: result = op1 << shamt;
+                    // SRLI / SRAI
+                    3'b101: begin
+                        if (funct7 == 7'b0100000) begin
+                            // SRAI
+                            result = $signed(op1) >>> shamt; 
+                        end
+                        else if (funct7 == 7'b0000000) begin
+                            // SRLI
+                            result = op1 >> shamt;
+                        end
+                        else begin
+                            // Default case for funct3 = 3'b101
+                            result = 32'b0;
+                        end
+                    end
+                    // Default case for funct3
+                    default: result = 32'b0;
+                endcase
             end
-            default: result = 32'b0; // Default case
+            // Default case for insn_type
+            default: result = 32'b0;
         endcase
     end
 endmodule
