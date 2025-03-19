@@ -11,15 +11,22 @@ module cpu(
 );
     // stall register
     reg stall;
+
     // IF/ID pipeline register
     reg [31:0] IF_ID_insn, IF_ID_pc;
+
     // ID/EX pipeline register
     reg [31:0] ID_EX_pc, ID_EX_imm;
     reg [4:0] ID_EX_dest, ID_EX_src1;
-    reg [2:0] ID_EX_alu_ctrl;
+    reg [3:0] ID_EX_insn_type;
+    reg [2:0] ID_EX_funct3;
+    reg [4:0] ID_EX_shamt;
+    reg [6:0] ID_EX_funct7;
+
     // EX/MEM pipeline register
     reg [31:0] EX_MEM_alu_result;
     reg [4:0] EX_MEM_dest;
+
     // MEM/WB pipeline registers
     reg signed [31:0] MEM_WB_result;
     reg [4:0] MEM_WB_dest;
@@ -61,22 +68,27 @@ module cpu(
     end
 
     // Decode Stage
-    wire [6:0] opcode;
-    wire [4:0] destination_reg, source_reg1;
+    wire [4:0] destination_reg;
     wire [2:0] funct3;
+    wire [4:0] source_reg1;
     wire [11:0] imm;
+   	wire [6:0] funct7;
+    wire [4:0] shamt;
+    wire [3:0] insn_type; 
 
     instruction_decoder decoder(
         .imem_insn(IF_ID_insn),
-        .opcode(opcode),
         .destination_reg(destination_reg),
         .funct3(funct3),
         .source_reg1(source_reg1),
-        .imm(imm)
+        .imm(imm),
+        .funct7(funct7),
+        .shamt(shamt),
+        .insn_type(insn_type)
     );
 
     // Hazard detection
-    always @(*) begin
+    always @ (*) begin
         // Check if source register of current instruction matches destination register in pipeline
         if ((ID_EX_dest != 5'b0) && (ID_EX_dest == source_reg1)) begin
             stall = 1'b1;
@@ -89,28 +101,26 @@ module cpu(
         end
     end
  
-    // ALU Control
-    wire [2:0] alu_ctrl_temp;
-
-    ALUDecoder alu_decoder(
-        .opcode(opcode),
-        .funct3(funct3),
-        .alu_ctrl(alu_ctrl_temp)
-    );
-
+    // Set ID_EX pipelines on clock edge
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             ID_EX_pc <= 32'b0;
             ID_EX_dest <= 5'b0;
             ID_EX_src1 <= 5'b0;
             ID_EX_imm <= 32'b0;
-            ID_EX_alu_ctrl <= 3'b111;
+            ID_EX_funct3 <=3'b0;
+            ID_EX_funct7 <= 7'b0;
+            ID_EX_insn_type <= 3'b111;
         end else begin
             ID_EX_pc <= IF_ID_pc;
             ID_EX_dest <= destination_reg;
             ID_EX_src1 <= source_reg1;
+            ID_EX_insn_type <= insn_type;
+            ID_EX_funct3 <= funct3;
+            ID_EX_funct7 <= funct7;
+            ID_EX_shamt <= shamt;
             ID_EX_imm <= {{20{imm[11]}}, imm};
-            ID_EX_alu_ctrl <= alu_ctrl_temp;
+            ID_EX_insn_type <= insn_type;
         end
     end
 
@@ -133,7 +143,10 @@ module cpu(
     ALU alu(
         .op1(reg_data1),
         .op2(ID_EX_imm),
-        .alu_ctrl(ID_EX_alu_ctrl),
+        .shamt(ID_EX_shamt),
+        .funct3(ID_EX_funct3),
+        .funct7(ID_EX_funct7),
+        .insn_type(ID_EX_insn_type),
         .result(alu_result)
     );
     
