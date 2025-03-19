@@ -1,1 +1,1 @@
-CMPE 140
+CMPE 140 Lab
