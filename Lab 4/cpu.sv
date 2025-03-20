@@ -111,7 +111,7 @@ module cpu(
             ID_EX_funct3 <=3'b0;
             ID_EX_funct7 <= 7'b0;
             ID_EX_insn_type <= 3'b111;
-        end else if begin
+        end else begin
             ID_EX_pc <= IF_ID_pc;
             ID_EX_dest <= destination_reg;
             ID_EX_src1 <= source_reg1;
