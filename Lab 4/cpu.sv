@@ -18,7 +18,7 @@ module cpu(
     // ID/EX pipeline register
     reg [31:0] ID_EX_pc, ID_EX_imm;
     reg [4:0] ID_EX_dest, ID_EX_src1;
-    reg [3:0] ID_EX_insn_type;
+    reg [2:0] ID_EX_insn_type;
     reg [2:0] ID_EX_funct3;
     reg [4:0] ID_EX_shamt;
     reg [6:0] ID_EX_funct7;
@@ -74,7 +74,7 @@ module cpu(
     wire [11:0] imm;
    	wire [6:0] funct7;
     wire [4:0] shamt;
-    wire [3:0] insn_type; 
+    wire [2:0] insn_type; 
 
     instruction_decoder decoder(
         .imem_insn(IF_ID_insn),
@@ -111,11 +111,11 @@ module cpu(
             ID_EX_funct3 <=3'b0;
             ID_EX_funct7 <= 7'b0;
             ID_EX_insn_type <= 3'b111;
-        end else begin
+        end else if (stall != 1'b1) begin
             ID_EX_pc <= IF_ID_pc;
             ID_EX_dest <= destination_reg;
             ID_EX_src1 <= source_reg1;
-            ID_EX_insn_type <= insn_type;
+            ID_EX_insn_type <= insn_type;
             ID_EX_funct3 <= funct3;
             ID_EX_funct7 <= funct7;
             ID_EX_shamt <= shamt;
