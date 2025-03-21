@@ -52,7 +52,7 @@ module cpu(
         .pc(pc)
     );
 
-    always @ (*) begin
+    always @(*) begin
         imem_addr = pc;
     end
 
@@ -99,7 +99,7 @@ module cpu(
             ID_EX_funct3 <=3'b0;
             ID_EX_funct7 <= 7'b0;
             ID_EX_insn_type <= 3'b111;
-        end else if (stall != 1'b1) begin
+        end else begin
             ID_EX_pc <= IF_ID_pc;
             ID_EX_dest <= destination_reg;
             ID_EX_src1 <= source_reg1;
@@ -108,12 +108,11 @@ module cpu(
             ID_EX_funct7 <= funct7;
             ID_EX_shamt <= shamt;
             ID_EX_imm <= {{20{imm[11]}}, imm};
-            ID_EX_insn_type <= insn_type;
         end   
     end
 
     // Hazard detection
-    always @ (*) begin
+  /*  always @ (*) begin
           if ((ID_EX_dest != 5'b0) && (ID_EX_dest == source_reg1)) begin
               stall = 1'b1;
           end 
@@ -126,6 +125,21 @@ module cpu(
           else begin
               stall = 1'b0;
           end
+    end*/
+
+    // Forwarding logic
+    reg [31:0] forwarded_op1;
+
+    always @(*) begin
+        if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src1)) begin
+            forwarded_op1 = EX_MEM_alu_result;
+        end
+        else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src1)) begin
+            forwarded_op1 = MEM_WB_result;
+        end
+        else begin
+            forwarded_op1 = reg_data1;
+        end
     end
 
     // Register File
@@ -145,7 +159,7 @@ module cpu(
     wire [31:0] alu_result;
     
     ALU alu(
-        .op1(reg_data1),
+        .op1(forwarded_op1),
         .op2(ID_EX_imm),
         .shamt(ID_EX_shamt),
         .funct3(ID_EX_funct3),
