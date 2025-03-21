@@ -95,16 +95,18 @@ module cpu(
     );
 
     // Hazard detection
-    always @(*) begin
-        // Check if source register of current instruction matches destination register in pipeline
-        if ((ID_EX_dest != 5'b0) && (ID_EX_dest == source_reg1)) begin
-            stall = 1'b1;
-        end else if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == source_reg1)) begin
-            stall = 1'b1;
-        end else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == source_reg1)) begin
-            stall = 1'b1; 
-        end else begin
-            stall = 1'b0;
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            stall <= 1'b0;
+        else begin
+            if ((ID_EX_dest != 5'b0) && (ID_EX_dest == source_reg1))
+                stall <= 1'b1;
+            else if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == source_reg1))
+                stall <= 1'b1;
+            else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == source_reg1))
+                stall <= 1'b1;
+            else
+                stall <= 1'b0;
         end
     end
  
