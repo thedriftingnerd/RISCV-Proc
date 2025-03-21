@@ -1,4 +1,23 @@
 `timescale 1ns / 1ps
+//////////////////////////////////////////////////////////////////////////////////
+// Company: 
+// Engineer: 
+// 
+// Create Date: 03/19/2025 12:56:25 AM
+// Design Name: 
+// Module Name: cpu
+// Project Name: 
+// Target Devices: 
+// Tool Versions: 
+// Description: 
+// 
+// Dependencies: 
+// 
+// Revision:
+// Revision 0.01 - File Created
+// Additional Comments:
+// 
+//////////////////////////////////////////////////////////////////////////////////
 
 module cpu(
     input rst_n,
@@ -11,22 +30,15 @@ module cpu(
 );
     // stall register
     reg stall;
-
     // IF/ID pipeline register
     reg [31:0] IF_ID_insn, IF_ID_pc;
-
     // ID/EX pipeline register
     reg [31:0] ID_EX_pc, ID_EX_imm;
     reg [4:0] ID_EX_dest, ID_EX_src1;
-    reg [2:0] ID_EX_insn_type;
-    reg [2:0] ID_EX_funct3;
-    reg [4:0] ID_EX_shamt;
-    reg [6:0] ID_EX_funct7;
-
+    reg [2:0] ID_EX_alu_ctrl;
     // EX/MEM pipeline register
     reg [31:0] EX_MEM_alu_result;
     reg [4:0] EX_MEM_dest;
-
     // MEM/WB pipeline registers
     reg signed [31:0] MEM_WB_result;
     reg [4:0] MEM_WB_dest;
@@ -68,27 +80,22 @@ module cpu(
     end
 
     // Decode Stage
-    wire [4:0] destination_reg;
+    wire [6:0] opcode;
+    wire [4:0] destination_reg, source_reg1;
     wire [2:0] funct3;
-    wire [4:0] source_reg1;
     wire [11:0] imm;
-   	wire [6:0] funct7;
-    wire [4:0] shamt;
-    wire [2:0] insn_type; 
 
     instruction_decoder decoder(
         .imem_insn(IF_ID_insn),
+        .opcode(opcode),
         .destination_reg(destination_reg),
         .funct3(funct3),
         .source_reg1(source_reg1),
-        .imm(imm),
-        .funct7(funct7),
-        .shamt(shamt),
-        .insn_type(insn_type)
+        .imm(imm)
     );
 
     // Hazard detection
-    always @ (*) begin
+    always @(*) begin
         // Check if source register of current instruction matches destination register in pipeline
         if ((ID_EX_dest != 5'b0) && (ID_EX_dest == source_reg1)) begin
             stall = 1'b1;
@@ -101,26 +108,28 @@ module cpu(
         end
     end
  
-    // Set ID_EX pipelines on clock edge
+    // ALU Control
+    wire [2:0] alu_ctrl_temp;
+
+    ALUDecoder alu_decoder(
+        .opcode(opcode),
+        .funct3(funct3),
+        .alu_ctrl(alu_ctrl_temp)
+    );
+
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             ID_EX_pc <= 32'b0;
             ID_EX_dest <= 5'b0;
             ID_EX_src1 <= 5'b0;
             ID_EX_imm <= 32'b0;
-            ID_EX_funct3 <=3'b0;
-            ID_EX_funct7 <= 7'b0;
-            ID_EX_insn_type <= 3'b111;
+            ID_EX_alu_ctrl <= 3'b111;
         end else begin
             ID_EX_pc <= IF_ID_pc;
             ID_EX_dest <= destination_reg;
             ID_EX_src1 <= source_reg1;
-            ID_EX_insn_type <= insn_type;
-            ID_EX_funct3 <= funct3;
-            ID_EX_funct7 <= funct7;
-            ID_EX_shamt <= shamt;
             ID_EX_imm <= {{20{imm[11]}}, imm};
-            ID_EX_insn_type <= insn_type;
+            ID_EX_alu_ctrl <= alu_ctrl_temp;
         end
     end
 
@@ -143,10 +152,7 @@ module cpu(
     ALU alu(
         .op1(reg_data1),
         .op2(ID_EX_imm),
-        .shamt(ID_EX_shamt),
-        .funct3(ID_EX_funct3),
-        .funct7(ID_EX_funct7),
-        .insn_type(ID_EX_insn_type),
+        .alu_ctrl(ID_EX_alu_ctrl),
         .result(alu_result)
     );
     
@@ -204,5 +210,138 @@ module cpu(
         $fclose(fd_pc);
         $fclose(fd_data);
         $display("Files closed successfully.");
+    end
+endmodule
+
+// Program Counter Module
+module PC(
+    input rst_n,
+    input clk,
+    input stall,
+    input [31:0] next_pc,
+    output reg [31:0] pc
+);
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)
+            pc <= 32'b0;
+        else if (!stall)
+            pc <= next_pc;
+    end
+endmodule
+
+
+// Instruction Decoder Module
+module instruction_decoder(
+    input [31:0] imem_insn,
+    output reg [6:0] opcode,
+    output reg [4:0] destination_reg,
+    output reg [2:0] funct3,
+    output reg [4:0] source_reg1,
+    output reg [11:0] imm,
+    output reg [4:0] shamt,  // New field for shift instructions
+    output reg [6:0] funct7  // Needed for SRLI/SRAI differentiation
+);
+    always @(*) begin
+        opcode = imem_insn[6:0];
+        destination_reg = imem_insn[11:7];
+        funct3 = imem_insn[14:12];
+        source_reg1 = imem_insn[19:15];
+        imm = imem_insn[31:20]; // Used for ADDI, ANDI, ORI, etc.
+        shamt = imem_insn[24:20]; // Needed for shift instructions
+        funct7 = imem_insn[31:25]; // Needed for SRLI vs SRAI
+    end
+endmodule
+
+
+// ALU Decoder Module
+module ALUDecoder(
+    input [6:0] opcode, 
+    input [2:0] funct3, 
+    input [6:0] funct7,
+    output reg [3:0] alu_ctrl
+);
+    always @(*) begin
+        case (opcode)
+            7'b0010011: begin // I-type ALU operations
+                case (funct3)
+                    3'b000: alu_ctrl = 4'b0000; // ADDI
+                    3'b100: alu_ctrl = 4'b0001; // XORI
+                    3'b110: alu_ctrl = 4'b0010; // ORI
+                    3'b111: alu_ctrl = 4'b0011; // ANDI
+                    3'b010: alu_ctrl = 4'b0100; // SLTI
+                    3'b011: alu_ctrl = 4'b0101; // SLTIU
+                    3'b001: alu_ctrl = 4'b0110; // SLLI
+                    3'b101: begin
+                        if (funct7 == 7'b0000000) 
+                            alu_ctrl = 4'b0111; // SRLI
+                        else if (funct7 == 7'b0100000) 
+                            alu_ctrl = 4'b1000; // SRAI
+                        else 
+                            alu_ctrl = 4'b1111; // Invalid
+                    end
+                    default: alu_ctrl = 4'b1111; // Default case for invalid
+                endcase
+            end
+            default: alu_ctrl = 4'b1111;
+        endcase
+    end
+endmodule
+
+
+// ALU Module
+module ALU(
+    input [31:0] op1,
+    input [31:0] op2,
+    input [4:0] shamt,
+    input [3:0] alu_ctrl,
+    output reg [31:0] result
+);
+    always @(*) begin
+        case (alu_ctrl)
+            4'b0000: result = op1 + op2; // ADDI
+            4'b0001: result = op1 ^ op2; // XORI
+            4'b0010: result = op1 | op2; // ORI
+            4'b0011: result = op1 & op2; // ANDI
+            4'b0100: result = ($signed(op1) < $signed(op2)) ? 32'b1 : 32'b0; // SLTI
+            4'b0101: result = (op1 < op2) ? 32'b1 : 32'b0; // SLTIU
+            4'b0110: result = op1 << shamt; // SLLI
+            4'b0111: result = op1 >> shamt; // SRLI
+            4'b1000: result = $signed(op1) >>> shamt; // SRAI
+            default: result = 32'b0; // Default case
+        endcase
+      end
+  endmodule
+
+
+// Register File Module
+module register_file(
+    input clk,
+    input rst_n,
+    input wen,
+    input [4:0] destination_reg,
+    input [4:0] source_reg1, 
+    input [31:0] write_data,
+    output reg [31:0] read_data1
+);
+    reg [31:0] registers [0:31];
+
+    initial begin
+        integer i;
+        for (i = 0; i < 32; i = i + 1)
+            registers[i] = 32'b0;
+    end
+
+    always @(*) begin
+        read_data1 = registers[source_reg1];
+    end
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            integer i;
+            for (i = 0; i < 32; i = i + 1)
+                registers[i] <= 32'b0;
+        end else if (wen && (destination_reg != 5'b0)) begin
+            registers[destination_reg] <= write_data;
+        end
     end
 endmodule
