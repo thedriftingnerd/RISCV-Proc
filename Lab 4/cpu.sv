@@ -36,10 +36,12 @@ module cpu(
     reg [15:0] cycle_counter;
     
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n)
+        if (!rst_n) begin
             cycle_counter <= 16'b0;
-        else
+        end
+        else begin
             cycle_counter <= cycle_counter + 1;
+        end
     end
 
     // Program Counter Module
