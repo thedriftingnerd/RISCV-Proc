@@ -11,7 +11,7 @@ module cpu(
 );
     // stall register
     reg stall;
-
+    
     // IF/ID pipeline register
     reg [31:0] IF_ID_insn, IF_ID_pc;
 
@@ -49,19 +49,20 @@ module cpu(
         .rst_n(rst_n),
         .clk(clk),
         .stall(stall),
-        .next_pc(next_pc),
         .pc(pc)
     );
 
-    assign next_pc = pc + 4;
-    assign imem_addr = pc;
+    always @ (*) begin
+        imem_addr = pc;
+    end
 
+    
     // Instruction Fetch Stage
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             IF_ID_insn <= 32'b0;
             IF_ID_pc <= 32'b0;
-        end else if (stall != 1'b1) begin
+        end else begin
             IF_ID_insn <= imem_insn;
             IF_ID_pc <= pc;
         end
@@ -85,23 +86,10 @@ module cpu(
         .funct7(funct7),
         .shamt(shamt),
         .insn_type(insn_type)
-    );
+    );  
+    
 
-    // Hazard detection
-    always @ (*) begin
-        // Check if source register of current instruction matches destination register in pipeline
-        if ((ID_EX_dest != 5'b0) && (ID_EX_dest == source_reg1)) begin
-            stall = 1'b1;
-        end else if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == source_reg1)) begin
-            stall = 1'b1;
-        end else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == source_reg1)) begin
-            stall = 1'b1; 
-        end else begin
-            stall = 1'b0;
-        end
-    end
- 
-    // Set ID_EX pipelines on clock edge
+      // Set ID_EX pipelines on clock edge
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
             ID_EX_pc <= 32'b0;
@@ -111,7 +99,7 @@ module cpu(
             ID_EX_funct3 <=3'b0;
             ID_EX_funct7 <= 7'b0;
             ID_EX_insn_type <= 3'b111;
-        end else begin
+        end else if (stall != 1'b1) begin
             ID_EX_pc <= IF_ID_pc;
             ID_EX_dest <= destination_reg;
             ID_EX_src1 <= source_reg1;
@@ -121,7 +109,23 @@ module cpu(
             ID_EX_shamt <= shamt;
             ID_EX_imm <= {{20{imm[11]}}, imm};
             ID_EX_insn_type <= insn_type;
-        end
+        end   
+    end
+
+    // Hazard detection
+    always @ (*) begin
+          if ((ID_EX_dest != 5'b0) && (ID_EX_dest == source_reg1)) begin
+              stall = 1'b1;
+          end 
+          else if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == source_reg1)) begin
+              stall = 1'b1;
+          end 
+          else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == source_reg1)) begin
+              stall = 1'b1;
+          end
+          else begin
+              stall = 1'b0;
+          end
     end
 
     // Register File
