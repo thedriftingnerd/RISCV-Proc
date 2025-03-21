@@ -7,9 +7,11 @@ module PC(
     output reg [31:0] pc
 );
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n)
+      if (!rst_n) begin
             pc <= 32'b0;
-        else if (!stall)
-            pc <= next_pc;
+      end
+      else if (!stall) begin
+            pc <= pc + 4;
+      end
     end
 endmodule
