@@ -7,12 +7,13 @@ module instruction_decoder(
     output reg [11:0] imm,
    	output reg [6:0] funct7,
     output reg [4:0] shamt,
-    output reg [3:0] insn_type
+    output reg [2:0] insn_type
 );
 
   always @ (*) begin
       case (imem_insn[6:0])
         7'b0010011: begin //I type instruction
+          insn_type = 3'b000;
           destination_reg = imem_insn[11:7];
           funct3 = imem_insn[14:12];
           source_reg1 = imem_insn[19:15];
