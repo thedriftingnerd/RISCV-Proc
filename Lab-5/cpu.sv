@@ -147,43 +147,29 @@ module cpu(
     reg [31:0] forwarded_op1;
     reg [31:0] forwarded_op2;
 
-    always @(*) begin
-        if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src1)) begin
-            forwarded_op1 = EX_MEM_alu_result;
-            if (ID_EX_alu_op_mux) begin
-                forwarded_op2 = ID_EX_imm;
-            end
-            else begin
-                forwarded_op2 = reg_data2;
-            end
-        end
-        else if (((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src2))) begin
-            forwarded_op1 = reg_data1;
-            forwarded_op2 = EX_MEM_alu_result;
-        end
-        else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src1)) begin
-            forwarded_op1 = MEM_WB_result;
-            if (ID_EX_alu_op_mux) begin
-                forwarded_op2 = ID_EX_imm;
-            end
-            else begin
-                forwarded_op2 = reg_data2;
-            end
-        end
-        else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src2)) begin
-            forwarded_op1 = reg_data1;
-            forwarded_op2 = MEM_WB_result;
-        end
-        else begin
-            forwarded_op1 = reg_data1;
-            if (ID_EX_alu_op_mux) begin
-                forwarded_op2 = ID_EX_imm;
-            end
-            else begin
-                forwarded_op2 = reg_data2;
-            end
-        end
+always @(*) begin
+    forwarded_op1 = reg_data1;
+    forwarded_op2 = reg_data2;
+
+    if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src1) && EX_MEM_wen) begin
+        forwarded_op1 = EX_MEM_alu_result;
+    end 
+    else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src1) && MEM_WB_wen) begin
+        forwarded_op1 = MEM_WB_result;
     end
+
+    if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src2) && EX_MEM_wen) begin
+        forwarded_op2 = EX_MEM_alu_result;
+    end 
+    else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src2) && MEM_WB_wen) begin
+        forwarded_op2 = MEM_WB_result;
+    end
+
+    if (ID_EX_alu_op_mux) begin
+        forwarded_op2 = ID_EX_imm;
+    end
+end
+    
 
     // Register File
     wire [31:0] reg_data1;
