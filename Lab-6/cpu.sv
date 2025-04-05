@@ -170,26 +170,23 @@ module cpu(
         forwarded_op1 = reg_data1;
         forwarded_op2 = reg_data2;
 
+        // Register "skips" for when the requested data is not yet written to reg.
         if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src1) && EX_MEM_wen)
             forwarded_op1 = EX_MEM_alu_result;
         else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src1) && MEM_WB_wen)
             forwarded_op1 = MEM_WB_result;
-        
         if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src2) && EX_MEM_wen)
             forwarded_op2 = EX_MEM_alu_result;
         else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src2) && MEM_WB_wen)
             forwarded_op2 = MEM_WB_result;
-            
 
-        // Load / Store
-        //if (ID_EX_insn_type == 3'b010 | ID_EX_insn_type == 3'b011) begin
-            // Capture store data from forwarding
-            //ID_EX_store_data = forwarded_op2;
+        // Load / Store, capture store data from forwarding before passing imm offset value
+        if (ID_EX_insn_type == 3'b010 | ID_EX_insn_type == 3'b011)
+            ID_EX_store_data = forwarded_op2;
 
-        //end else begin
         if (ID_EX_alu_op_mux)
             forwarded_op2 = ID_EX_imm;
-        //end 
+    
     end
 
     // Execute Stage: ALU instance.
@@ -221,7 +218,7 @@ module cpu(
             EX_MEM_dmem_wen   <= ID_EX_dmem_wen;
             EX_MEM_funct3     <= ID_EX_funct3;    // Propagate store type info
             EX_MEM_insn_type  <= ID_EX_insn_type; // 3'b010: store, 3'b011: load
-            EX_MEM_store_data <= forwarded_op2;
+            EX_MEM_store_data <= ID_EX_store_data;
         end
     end
 

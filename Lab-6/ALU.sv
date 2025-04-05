@@ -105,14 +105,14 @@ module ALU(
                     default: result = 32'b0;
                 endcase
             end
-            // For I-type Load-Store (stores)
+            // Load-Store (Stores): Calculate effective address for store instructions
             3'b010: begin
-                result = op1; // effective address
+                result = op1 + op2; // effective address = base address + offset
             end
 
-            // For R-type Load-Store (loads)
+            // Load-Store (Loads): Calculate effective address for load instructions
             3'b011: begin
-                result = op1;
+                result = op1 + op2; // effective address = base address + offset
             end
 
             // Default case for insn_type

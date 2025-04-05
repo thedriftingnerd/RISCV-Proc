@@ -52,7 +52,7 @@ module instruction_decoder(
           imm[11:5] = imem_insn[31:24];
           funct7 = 0;
           shamt = 0; 
-          alu_op_mux = 0;
+          alu_op_mux = 1;
           wen = 0;
           dmem_wen = 1;
         end
@@ -61,13 +61,13 @@ module instruction_decoder(
           destination_reg = imem_insn[11:7];
           funct3 = imem_insn[14:12];
           source_reg1 = imem_insn[19:15];
-          source_reg2 = imem_insn[24:20];
-          funct7 = imem_insn[31:25];
-          imm = 0;
-          shamt = 0;
-          alu_op_mux = 0;
+          source_reg2 = 5'b0;
+          imm[11:0] = imem_insn[31:20];
+          funct7 = 0;
+          shamt = 0; 
+          alu_op_mux = 1;
           wen = 1;
-          dmem_wen = 1;
+          dmem_wen = 0;
         end
         default: begin
           insn_type = 3'b111;
