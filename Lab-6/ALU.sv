@@ -105,35 +105,14 @@ module ALU(
                     default: result = 32'b0;
                 endcase
             end
-            // Load-Store I-Type
+            // For I-type Load-Store (stores)
             3'b010: begin
-                case(funct3)
-                    3'b000: begin // SB
-                    end
-                    3'b001: begin // SH
-                    end
-                    3'b010: begin // SW
-                    end
-
-                    default: result = 32'b0;
-                endcase
+                result = op1; // effective address
             end
-            // Load-Store R-Type
-            3'b011: begin
-                case(funct3)
-                    3'b000: begin // LB
-                    end
-                    3'b001: begin // LH
-                    end
-                    3'b010: begin // LW
-                    end
-                    3'b100: begin // LBU
-                    end
-                    3'b101: begin // LHU
-                    end
 
-                    default: result = 32'b0;
-                endcase
+            // For R-type Load-Store (loads)
+            3'b011: begin
+                result = op1;
             end
 
             // Default case for insn_type

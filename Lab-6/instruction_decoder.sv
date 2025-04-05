@@ -10,7 +10,8 @@ module instruction_decoder(
     output reg [4:0] shamt,
     output reg [2:0] insn_type,
     output reg alu_op_mux,
-    output reg wen
+    output reg wen,
+    output reg dmem_wen
 );
 
   always @ (*) begin
@@ -26,6 +27,7 @@ module instruction_decoder(
           shamt = imem_insn[24:20]; 
           alu_op_mux = 1;
           wen = 1;
+          dmem_wen = 0;
         end
         7'b0110011: begin //R type instruction
           insn_type = 3'b001;
@@ -38,6 +40,7 @@ module instruction_decoder(
           shamt = 0;
           alu_op_mux = 0;
           wen = 1;
+          dmem_wen = 0;
         end
         7'b0100011: begin //I type Load-Store
           insn_type = 3'b010;
@@ -50,6 +53,7 @@ module instruction_decoder(
           shamt = imem_insn[24:20]; 
           alu_op_mux = 1;
           wen = 1;
+          dmem_wen = 1;
         end
         7'b0000011: begin //R type Load-Store
           insn_type = 3'b011;
@@ -62,6 +66,7 @@ module instruction_decoder(
           shamt = 0;
           alu_op_mux = 0;
           wen = 1;
+          dmem_wen = 1;
         end
         default: begin
           insn_type = 3'b111;
@@ -73,6 +78,7 @@ module instruction_decoder(
           funct7 = 0;
           shamt = 0;
           wen = 0;
+          dmem_wen = 0;
           alu_op_mux = 0;
         end
       endcase
