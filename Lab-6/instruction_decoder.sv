@@ -42,20 +42,21 @@ module instruction_decoder(
           wen = 1;
           dmem_wen = 0;
         end
-        7'b0100011: begin //I type Load-Store
+        7'b0100011: begin // Store type Load-Store
           insn_type = 3'b010;
-          destination_reg = imem_insn[11:7];
+          destination_reg = 0;
+          imm[4:0] = imem_insn[11:7];
           funct3 = imem_insn[14:12];
           source_reg1 = imem_insn[19:15];
-          source_reg2 = 0;
-          imm = imem_insn[31:20];
-          funct7 = imem_insn[31:25];
-          shamt = imem_insn[24:20]; 
-          alu_op_mux = 1;
-          wen = 1;
+          source_reg2 = imem_insn[24:20];
+          imm[11:5] = imem_insn[31:24];
+          funct7 = 0;
+          shamt = 0; 
+          alu_op_mux = 0;
+          wen = 0;
           dmem_wen = 1;
         end
-        7'b0000011: begin //R type Load-Store
+        7'b0000011: begin // Load type Load-Store
           insn_type = 3'b011;
           destination_reg = imem_insn[11:7];
           funct3 = imem_insn[14:12];
@@ -77,9 +78,9 @@ module instruction_decoder(
           imm = 0;
           funct7 = 0;
           shamt = 0;
+          alu_op_mux = 0;
           wen = 0;
           dmem_wen = 0;
-          alu_op_mux = 0;
         end
       endcase
     end

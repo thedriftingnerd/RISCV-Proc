@@ -16,6 +16,8 @@ module cpu(
     
     // IF/ID pipeline registers
     reg [31:0] IF_ID_insn, IF_ID_pc;
+    reg ID_wen;
+    reg ID_dmem_wen;
     
     // ID/EX pipeline registers
     reg [31:0] ID_EX_pc, ID_EX_imm;
@@ -42,13 +44,12 @@ module cpu(
     reg signed [31:0] MEM_WB_result;
     reg [4:0]         MEM_WB_dest;
     reg               MEM_WB_wen;
-    reg               MEM_WB_dmem_wen;
 
     // dmem_data tri-state control:
     // dmem_data is driven by dmem_data_out when writing;
     // otherwise it is tri-stated so that RAM can drive it during loads.
     reg [31:0] dmem_data_out;
-    assign dmem_data = (MEM_WB_dmem_wen) ? dmem_data_out : 32'hz;
+    assign dmem_data = (dmem_wen) ? dmem_data_out : 32'hz;
     
     // byte_en output and its internal register.
     reg [3:0] byte_en_reg;
@@ -109,10 +110,10 @@ module cpu(
         .shamt(shamt),
         .insn_type(insn_type),
         .alu_op_mux(alu_op_mux),
-        .wen(wen),
-        .dmem_wen(dmem_wen)
+        .wen(ID_wen),
+        .dmem_wen(ID_dmem_wen)
     );  
-    
+
     // ID/EX Pipeline Register Update (including store data capture)
     // For store instructions, the store data comes from reg_data2.
     // (If needed, you might add forwarding for store data as well.)
@@ -142,11 +143,8 @@ module cpu(
             ID_EX_shamt      <= shamt;
             ID_EX_alu_op_mux <= alu_op_mux;
             ID_EX_imm        <= {{20{imm[11]}}, imm};
-            ID_EX_wen        <= wen;
-            ID_EX_dmem_wen   <= dmem_wen;
-            // Capture store data from forwarding
-            ID_EX_store_data <= forwarded_op2;
-
+            ID_EX_wen        <= ID_wen;
+            ID_EX_dmem_wen   <= ID_dmem_wen;
         end
     end
 
@@ -171,7 +169,7 @@ module cpu(
     always @(*) begin
         forwarded_op1 = reg_data1;
         forwarded_op2 = reg_data2;
-        
+
         if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src1) && EX_MEM_wen)
             forwarded_op1 = EX_MEM_alu_result;
         else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src1) && MEM_WB_wen)
@@ -181,9 +179,17 @@ module cpu(
             forwarded_op2 = EX_MEM_alu_result;
         else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src2) && MEM_WB_wen)
             forwarded_op2 = MEM_WB_result;
-        
+            
+
+        // Load / Store
+        //if (ID_EX_insn_type == 3'b010 | ID_EX_insn_type == 3'b011) begin
+            // Capture store data from forwarding
+            //ID_EX_store_data = forwarded_op2;
+
+        //end else begin
         if (ID_EX_alu_op_mux)
             forwarded_op2 = ID_EX_imm;
+        //end 
     end
 
     // Execute Stage: ALU instance.
@@ -215,7 +221,7 @@ module cpu(
             EX_MEM_dmem_wen   <= ID_EX_dmem_wen;
             EX_MEM_funct3     <= ID_EX_funct3;    // Propagate store type info
             EX_MEM_insn_type  <= ID_EX_insn_type; // 3'b010: store, 3'b011: load
-            EX_MEM_store_data <= ID_EX_store_data;
+            EX_MEM_store_data <= forwarded_op2;
         end
     end
 
@@ -227,7 +233,7 @@ module cpu(
             MEM_WB_result <= 32'b0;
             MEM_WB_dest   <= 5'b0;
             MEM_WB_wen    <= 1'b0;
-            MEM_WB_dmem_wen <= 1'b0;
+            dmem_wen <= 1'b0;
             byte_en_reg = 4'b0;
         end else begin
             if (EX_MEM_insn_type == 3'b011) begin 
@@ -238,7 +244,7 @@ module cpu(
             end else if (EX_MEM_insn_type == 3'b010) begin
                 dmem_addr = EX_MEM_alu_result; // Use the effective address computed in EX stage.
                 dmem_data_out = EX_MEM_store_data;
-                MEM_WB_result <= EX_MEM_alu_result;
+                MEM_WB_result = EX_MEM_alu_result;
                 // When executing a store (insn_type == 3'b010), drive dmem_wen and set byte_en.
                 case (EX_MEM_funct3)
                     3'b000: begin // SB (Store Byte)
@@ -274,7 +280,7 @@ module cpu(
 
             MEM_WB_dest <= EX_MEM_dest;
             MEM_WB_wen  <= EX_MEM_wen;
-            MEM_WB_dmem_wen <= EX_MEM_dmem_wen;
+            dmem_wen <= EX_MEM_dmem_wen;
         end
     end
 
