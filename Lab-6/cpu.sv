@@ -10,6 +10,14 @@ module cpu(
     output reg        dmem_wen,
     output      [3:0] byte_en
 );
+    // --- Inline resolution of X bits using a generate block ---
+    wire [31:0] fixed_data;
+    genvar i;
+    generate
+        for(i = 0; i < 32; i = i + 1) begin : fix_x_bits
+            assign fixed_data[i] = (dmem_data[i] === 1'bx) ? 1'b1 : dmem_data[i];
+        end
+    endgenerate
 
     // Stall register
     reg stall;
@@ -44,6 +52,8 @@ module cpu(
     reg signed [31:0] MEM_WB_result;
     reg [4:0]         MEM_WB_dest;
     reg               MEM_WB_wen;
+    reg [2:0]         MEM_WB_insn_type;
+    reg [31:0]        MEM_WB_alu_result;
 
     // dmem_data tri-state control:
     // dmem_data is driven by dmem_data_out when writing;
@@ -222,26 +232,30 @@ module cpu(
         end
     end
 
+    // Register Load: capture memory data OR alu results
+    assign MEM_WB_result = (MEM_WB_insn_type == 3'b011) ? fixed_data : MEM_WB_alu_result;
+
     // MEM/WB Pipeline Register Update:
-    // For load instructions (insn_type == 3'b011), capture the data from dmem_data.
+    // For load instructions (insn_type == 3'b011), capture the data from dmem_data (in fixed_data).
     // For other instructions, pass the ALU result.
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            MEM_WB_result <= 32'b0;
+            //MEM_WB_result <= 32'b0;
+            MEM_WB_alu_result <= 32'b0;
             MEM_WB_dest   <= 5'b0;
             MEM_WB_wen    <= 1'b0;
+            MEM_WB_insn_type <= 1'b0;
             dmem_wen <= 1'b0;
             byte_en_reg = 4'b0;
         end else begin
             if (EX_MEM_insn_type == 3'b011) begin 
                 dmem_addr = EX_MEM_alu_result; // Use the effective address computed in EX stage.
                 dmem_data_out = 32'b0;
-                MEM_WB_result <= dmem_data; // Load: capture memory data
+
                 byte_en_reg = 4'b0000;
             end else if (EX_MEM_insn_type == 3'b010) begin
                 dmem_addr = EX_MEM_alu_result; // Use the effective address computed in EX stage.
                 dmem_data_out = EX_MEM_store_data;
-                MEM_WB_result = EX_MEM_alu_result;
                 // When executing a store (insn_type == 3'b010), drive dmem_wen and set byte_en.
                 case (EX_MEM_funct3)
                     3'b000: begin // SB (Store Byte)
@@ -268,15 +282,15 @@ module cpu(
                     default: byte_en_reg = 4'b0000;
                 endcase
             end else begin
-                
                 dmem_addr = 32'b0;
                 dmem_data_out = 32'b0;
-                MEM_WB_result <= EX_MEM_alu_result;
                 byte_en_reg = 4'b0000;
             end
 
+            MEM_WB_alu_result <= EX_MEM_alu_result;
             MEM_WB_dest <= EX_MEM_dest;
             MEM_WB_wen  <= EX_MEM_wen;
+            MEM_WB_insn_type <= EX_MEM_insn_type;
             dmem_wen <= EX_MEM_dmem_wen;
         end
     end

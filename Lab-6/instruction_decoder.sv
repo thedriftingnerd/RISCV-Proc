@@ -49,7 +49,7 @@ module instruction_decoder(
           funct3 = imem_insn[14:12];
           source_reg1 = imem_insn[19:15];
           source_reg2 = imem_insn[24:20];
-          imm[11:5] = imem_insn[31:24];
+          imm[11:5] = imem_insn[31:25];
           funct7 = 0;
           shamt = 0; 
           alu_op_mux = 1;
