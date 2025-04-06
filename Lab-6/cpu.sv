@@ -251,28 +251,20 @@ module cpu(
 
     // Combinational Load Extraction in the MEM stage:
     // This wire computes the correctly extracted and extended load value based on
-    // the effective address (EX_MEM_alu_result) and funct3. Note that it is valid only when
-    // a load instruction (EX_MEM_insn_type == 3'b011) is in the MEM stage.
+    // the effective address (MEM_WB_alu_result) and funct3. Note that it is valid only when
+    // a load instruction (MEM_WB_insn_type == 3'b011) is in the MEM stage.
     wire [31:0] load_result;
     assign load_result = (MEM_WB_insn_type == 3'b011) ? (
         (MEM_WB_funct3 == 3'b000) ? // LB: sign-extended byte
-            ( (MEM_WB_alu_result[1:0] == 2'b00) ? {{24{fixed_data[7]}},  fixed_data[7:0]} :
-              (MEM_WB_alu_result[1:0] == 2'b01) ? {{24{fixed_data[15]}}, fixed_data[15:8]} :
-              (MEM_WB_alu_result[1:0] == 2'b10) ? {{24{fixed_data[23]}}, fixed_data[23:16]} :
-                                                {{24{fixed_data[31]}}, fixed_data[31:24]} )
+            ( {{24{fixed_data[7]}},  fixed_data[7:0]} )
         : (MEM_WB_funct3 == 3'b001) ? // LH: sign-extended halfword
-            ( (MEM_WB_alu_result[1] == 1'b0) ? {{16{fixed_data[15]}}, fixed_data[15:0]} :
-                                                {{16{fixed_data[31]}}, fixed_data[31:16]} )
+            ( {{16{fixed_data[15]}}, fixed_data[15:0]} )
         : (MEM_WB_funct3 == 3'b010) ? // LW: load word
             fixed_data
         : (MEM_WB_funct3 == 3'b100) ? // LBU: zero-extended byte
-            ( (MEM_WB_alu_result[1:0] == 2'b00) ? {24'b0, fixed_data[7:0]} :
-              (MEM_WB_alu_result[1:0] == 2'b01) ? {24'b0, fixed_data[15:8]} :
-              (MEM_WB_alu_result[1:0] == 2'b10) ? {24'b0, fixed_data[23:16]} :
-                                                {24'b0, fixed_data[31:24]} )
+            ( {24'b0, fixed_data[7:0]} )
         : (MEM_WB_funct3 == 3'b101) ? // LHU: zero-extended halfword
-            ( (MEM_WB_alu_result[1] == 1'b0) ? {16'b0, fixed_data[15:0]} :
-                                                {16'b0, fixed_data[31:16]} )
+            ( {16'b0, fixed_data[15:0]} )
         : fixed_data
     ) : 32'b0;
 
@@ -305,29 +297,31 @@ module cpu(
                 // When executing a store (insn_type == 3'b010), drive dmem_wen and set byte_en_dmem.
                 case (EX_MEM_funct3)
                     3'b000: begin // SB (Store Byte)
-                        case (EX_MEM_alu_result[1:0])
+                        /*case (EX_MEM_alu_result[1:0])
                             2'b00: byte_en_dmem_reg = 4'b0001;
                             2'b01: byte_en_dmem_reg = 4'b0010;
                             2'b10: byte_en_dmem_reg = 4'b0100;
                             2'b11: byte_en_dmem_reg = 4'b1000;
                             default: byte_en_dmem_reg = 4'b0000;
-                        endcase
+                        endcase*/
+                        byte_en_dmem_reg = 4'b0001;
                     end
                     3'b001: begin // SH (Store Halfword)
-                        case (EX_MEM_alu_result[1:0])
+                        /*case (EX_MEM_alu_result[1:0])
                             2'b00: byte_en_dmem_reg = 4'b0011; // bytes 0 and 1
                             2'b01: byte_en_dmem_reg = 4'b0110; // example: bytes 1 and 2
                             2'b10: byte_en_dmem_reg = 4'b1100; // bytes 2 and 3
                             2'b11: byte_en_dmem_reg = 4'b1010; // example: wrap-around (if allowed)
                             default: byte_en_dmem_reg = 4'b0000;
-                        endcase
+                        endcase*/
+                        byte_en_dmem_reg = 4'b0011;
                     end
                     3'b010: begin // SW (Store Word)
                         byte_en_dmem_reg = 4'b1111;
                     end
                     default: byte_en_dmem_reg = 4'b0000;
                 endcase
-                byte_en_reg = 4'b0000;
+                byte_en_reg = 4'b1111;
             end else begin
                 dmem_addr = 32'b0;
                 byte_en_dmem_reg = 4'b0000;
