@@ -176,27 +176,26 @@ module cpu(
     // Forwarding Logic
     reg [31:0] forwarded_op1;
     reg [31:0] forwarded_op2;
+    reg ram_forward_flag = 1'b0;
     always @(*) begin
         forwarded_op1 = reg_data1;
         forwarded_op2 = reg_data2;
 
         // Register "skips" for when the requested data is not yet written to reg.
-        if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src1) && EX_MEM_wen)
+        if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src1) && EX_MEM_wen) begin
             forwarded_op1 = EX_MEM_alu_result;
-        else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src1) && MEM_WB_wen)
+        end else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src1) && MEM_WB_wen) begin
             forwarded_op1 = MEM_WB_result;
-        if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src2) && EX_MEM_wen)
-            forwarded_op2 = EX_MEM_alu_result;
-        else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src2) && MEM_WB_wen)
-            forwarded_op2 = MEM_WB_result;
+        end
 
-        // Load / Store, capture store data from forwarding before passing imm offset value
-        if (ID_EX_insn_type == 3'b010 | ID_EX_insn_type == 3'b011)
-            ID_EX_store_data = forwarded_op2;
+        if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src2) && EX_MEM_wen) begin 
+            forwarded_op2 = EX_MEM_alu_result;
+        end else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src2) && MEM_WB_wen) begin
+            forwarded_op2 = MEM_WB_result;
+        end
 
         if (ID_EX_alu_op_mux)
             forwarded_op2 = ID_EX_imm;
-    
     end
 
     // Execute Stage: ALU instance.
@@ -221,6 +220,7 @@ module cpu(
             EX_MEM_funct3     <= 3'b0;
             EX_MEM_insn_type  <= 3'b0;
             EX_MEM_store_data <= 32'b0;
+            ram_forward_flag  <= 1'b0;
         end else begin
             EX_MEM_alu_result <= alu_result;
             EX_MEM_dest       <= ID_EX_dest;
@@ -229,6 +229,16 @@ module cpu(
             EX_MEM_funct3     <= ID_EX_funct3;    // Propagate store type info
             EX_MEM_insn_type  <= ID_EX_insn_type; // 3'b010: store, 3'b011: load
             EX_MEM_store_data <= ID_EX_store_data;
+            
+            // Load / Store, capture store data from forwarding before passing imm offset value
+            if (ram_forward_flag == 1'b1) begin
+                EX_MEM_store_data = MEM_WB_result;
+                ram_forward_flag = 1'b0;
+            end 
+            if ((ID_EX_insn_type == 3'b010) && (EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src2) && EX_MEM_wen) begin 
+                ID_EX_store_data = EX_MEM_alu_result; // not needed?
+                ram_forward_flag = 1'b1;
+            end
         end
     end
 
@@ -248,14 +258,13 @@ module cpu(
             dmem_wen <= 1'b0;
             byte_en_reg = 4'b0;
         end else begin
+            dmem_data_out = EX_MEM_store_data;
             if (EX_MEM_insn_type == 3'b011) begin 
                 dmem_addr = EX_MEM_alu_result; // Use the effective address computed in EX stage.
-                dmem_data_out = 32'b0;
 
                 byte_en_reg = 4'b0000;
             end else if (EX_MEM_insn_type == 3'b010) begin
                 dmem_addr = EX_MEM_alu_result; // Use the effective address computed in EX stage.
-                dmem_data_out = EX_MEM_store_data;
                 // When executing a store (insn_type == 3'b010), drive dmem_wen and set byte_en.
                 case (EX_MEM_funct3)
                     3'b000: begin // SB (Store Byte)
@@ -283,7 +292,6 @@ module cpu(
                 endcase
             end else begin
                 dmem_addr = 32'b0;
-                dmem_data_out = 32'b0;
                 byte_en_reg = 4'b0000;
             end
 
