@@ -10,17 +10,6 @@ module cpu(
     output reg        dmem_wen,
     output      [3:0] byte_en
 );
-    // Used when reading from RAM, for when the memory being accessed is not yet populated
-    // Outputs 1 instead of X bits
-    wire [31:0] fixed_data;
-    genvar i;
-    generate
-        for(i = 0; i < 32; i = i + 1) begin : fix_x_bits
-            assign fixed_data[i] = (dmem_data[i] === 1'bx) ? 1'b1 : dmem_data[i];
-        end
-    endgenerate
-    //assign fixed_data = dmem_data;
-
     // Stall register
     reg stall;
     
@@ -55,6 +44,7 @@ module cpu(
     reg [4:0]         MEM_WB_dest;
     reg               MEM_WB_wen;
     reg [2:0]         MEM_WB_insn_type;
+    reg [2:0]         MEM_WB_funct3;
     reg [31:0]        MEM_WB_alu_result;
     reg [31:0]        MEM_WB_ram_result;
 
@@ -248,19 +238,57 @@ module cpu(
         end
     end
 
+    // Used when reading from RAM, for when the memory being accessed is not yet populated
+    // Outputs 1 instead of X bits
+    wire [31:0] fixed_data;
+    genvar i;
+    generate
+        for(i = 0; i < 32; i = i + 1) begin : fix_x_bits
+            assign fixed_data[i] = (dmem_data[i] === 1'bx) ? 1'b1 : dmem_data[i];
+        end
+    endgenerate
+    //assign fixed_data = dmem_data;
+
+    // Combinational Load Extraction in the MEM stage:
+    // This wire computes the correctly extracted and extended load value based on
+    // the effective address (EX_MEM_alu_result) and funct3. Note that it is valid only when
+    // a load instruction (EX_MEM_insn_type == 3'b011) is in the MEM stage.
+    wire [31:0] load_result;
+    assign load_result = (MEM_WB_insn_type == 3'b011) ? (
+        (MEM_WB_funct3 == 3'b000) ? // LB: sign-extended byte
+            ( (MEM_WB_alu_result[1:0] == 2'b00) ? {{24{fixed_data[7]}},  fixed_data[7:0]} :
+              (MEM_WB_alu_result[1:0] == 2'b01) ? {{24{fixed_data[15]}}, fixed_data[15:8]} :
+              (MEM_WB_alu_result[1:0] == 2'b10) ? {{24{fixed_data[23]}}, fixed_data[23:16]} :
+                                                {{24{fixed_data[31]}}, fixed_data[31:24]} )
+        : (MEM_WB_funct3 == 3'b001) ? // LH: sign-extended halfword
+            ( (MEM_WB_alu_result[1] == 1'b0) ? {{16{fixed_data[15]}}, fixed_data[15:0]} :
+                                                {{16{fixed_data[31]}}, fixed_data[31:16]} )
+        : (MEM_WB_funct3 == 3'b010) ? // LW: load word
+            fixed_data
+        : (MEM_WB_funct3 == 3'b100) ? // LBU: zero-extended byte
+            ( (MEM_WB_alu_result[1:0] == 2'b00) ? {24'b0, fixed_data[7:0]} :
+              (MEM_WB_alu_result[1:0] == 2'b01) ? {24'b0, fixed_data[15:8]} :
+              (MEM_WB_alu_result[1:0] == 2'b10) ? {24'b0, fixed_data[23:16]} :
+                                                {24'b0, fixed_data[31:24]} )
+        : (MEM_WB_funct3 == 3'b101) ? // LHU: zero-extended halfword
+            ( (MEM_WB_alu_result[1] == 1'b0) ? {16'b0, fixed_data[15:0]} :
+                                                {16'b0, fixed_data[31:16]} )
+        : fixed_data
+    ) : 32'b0;
+
     // Register Load: capture memory data OR alu results
-    assign MEM_WB_result = (MEM_WB_insn_type == 3'b011) ? fixed_data : MEM_WB_alu_result;
+    assign MEM_WB_result = (MEM_WB_insn_type == 3'b011) ? load_result : MEM_WB_alu_result;
 
     // MEM/WB Pipeline Register Update:
     // For load instructions (insn_type == 3'b011), capture the data from dmem_data (in fixed_data).
     // For other instructions, pass the ALU result.
     always @(posedge clk or negedge rst_n) begin
         if (!rst_n) begin
-            //MEM_WB_result <= 32'b0;
             MEM_WB_alu_result <= 32'b0;
             MEM_WB_dest   <= 5'b0;
             MEM_WB_wen    <= 1'b0;
             MEM_WB_insn_type <= 1'b0;
+            MEM_WB_funct3 <= 3'b0;
             dmem_wen <= 1'b0;
             byte_en_dmem_reg = 4'b0;
             byte_en_reg = 4'b0;
@@ -270,33 +298,8 @@ module cpu(
                 dmem_addr = EX_MEM_alu_result; // Use the effective address computed in EX stage.
 
                 byte_en_dmem_reg = 4'b0000;
+                byte_en_reg = 4'b1111;
 
-                // When executing a load (insn_type == 3'b011), drive wen and set byte_en.
-                case (EX_MEM_funct3)
-                    3'b000: begin // LW (Load Byte)
-                        byte_en_reg = 4'b0001;
-                        //MEM_WB_alu_result <= EX_MEM_alu_result;
-                    end
-                    3'b001: begin // LH (Load Half Word)
-                        byte_en_reg = 4'b0011;
-                        //MEM_WB_alu_result <= EX_MEM_alu_result;
-                    end
-                    3'b010: begin // LW (Load Word)
-                        byte_en_reg = 4'b1111;
-                        //MEM_WB_alu_result <= EX_MEM_alu_result;
-                    end
-                    3'b100: begin // LBU (Load Byte Unsigned)
-                        byte_en_reg = 4'b0001;
-                        //MEM_WB_alu_result <= EX_MEM_alu_result;
-                    end
-                    3'b101: begin // LHU (Load Half Word Unsigned)
-                        byte_en_reg = 4'b0011;
-                        //MEM_WB_alu_result <= EX_MEM_alu_result;
-                    end
-
-                    default: byte_en_reg = 4'b0000;
-                endcase
-                
             end else if (EX_MEM_insn_type == 3'b010) begin
                 dmem_addr = EX_MEM_alu_result; // Use the effective address computed in EX stage.
                 // When executing a store (insn_type == 3'b010), drive dmem_wen and set byte_en_dmem.
@@ -325,14 +328,14 @@ module cpu(
                     default: byte_en_dmem_reg = 4'b0000;
                 endcase
                 byte_en_reg = 4'b0000;
-                MEM_WB_alu_result <= EX_MEM_alu_result;
             end else begin
                 dmem_addr = 32'b0;
                 byte_en_dmem_reg = 4'b0000;
-                byte_en_reg = 4'b1111;
-                MEM_WB_alu_result <= EX_MEM_alu_result;
+                byte_en_reg = 4'b1111; 
             end
 
+            MEM_WB_funct3 <= EX_MEM_funct3;
+            MEM_WB_alu_result <= EX_MEM_alu_result;
             MEM_WB_dest <= EX_MEM_dest;
             MEM_WB_wen  <= EX_MEM_wen;
             MEM_WB_insn_type <= EX_MEM_insn_type;
