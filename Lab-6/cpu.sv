@@ -172,7 +172,7 @@ module cpu(
     // Forwarding Logic
     reg [31:0] forwarded_op1;
     reg [31:0] forwarded_op2;
-    reg ram_forward_flag = 1'b0;
+    reg ram_forward_flag;
     always @(*) begin
         forwarded_op1 = reg_data1;
         forwarded_op2 = reg_data2;
@@ -282,50 +282,39 @@ module cpu(
             MEM_WB_insn_type <= 1'b0;
             MEM_WB_funct3 <= 3'b0;
             dmem_wen <= 1'b0;
-            byte_en_dmem_reg = 4'b0;
-            byte_en_reg = 4'b0;
+            dmem_addr <= 32'b0;
+            byte_en_dmem_reg <= 4'b0;
+            byte_en_reg <= 4'b0;
         end else begin
             dmem_data_out = EX_MEM_store_data;
             if (EX_MEM_insn_type == 3'b011) begin 
-                dmem_addr = EX_MEM_alu_result; // Use the effective address computed in EX stage.
+                dmem_addr <= EX_MEM_alu_result; // Use the effective address computed in EX stage.
 
-                byte_en_dmem_reg = 4'b0000;
-                byte_en_reg = 4'b1111;
+                byte_en_dmem_reg <= 4'b0000;
+                byte_en_reg <= 4'b1111;
 
             end else if (EX_MEM_insn_type == 3'b010) begin
-                dmem_addr = EX_MEM_alu_result; // Use the effective address computed in EX stage.
+                dmem_addr <= EX_MEM_alu_result; // Use the effective address computed in EX stage.
+
                 // When executing a store (insn_type == 3'b010), drive dmem_wen and set byte_en_dmem.
                 case (EX_MEM_funct3)
                     3'b000: begin // SB (Store Byte)
-                        /*case (EX_MEM_alu_result[1:0])
-                            2'b00: byte_en_dmem_reg = 4'b0001;
-                            2'b01: byte_en_dmem_reg = 4'b0010;
-                            2'b10: byte_en_dmem_reg = 4'b0100;
-                            2'b11: byte_en_dmem_reg = 4'b1000;
-                            default: byte_en_dmem_reg = 4'b0000;
-                        endcase*/
-                        byte_en_dmem_reg = 4'b0001;
+                        byte_en_dmem_reg <= 4'b0001;
                     end
                     3'b001: begin // SH (Store Halfword)
-                        /*case (EX_MEM_alu_result[1:0])
-                            2'b00: byte_en_dmem_reg = 4'b0011; // bytes 0 and 1
-                            2'b01: byte_en_dmem_reg = 4'b0110; // example: bytes 1 and 2
-                            2'b10: byte_en_dmem_reg = 4'b1100; // bytes 2 and 3
-                            2'b11: byte_en_dmem_reg = 4'b1010; // example: wrap-around (if allowed)
-                            default: byte_en_dmem_reg = 4'b0000;
-                        endcase*/
-                        byte_en_dmem_reg = 4'b0011;
+                        byte_en_dmem_reg <= 4'b0011;
                     end
                     3'b010: begin // SW (Store Word)
-                        byte_en_dmem_reg = 4'b1111;
+                        byte_en_dmem_reg <= 4'b1111;
                     end
-                    default: byte_en_dmem_reg = 4'b0000;
+                    default: byte_en_dmem_reg <= 4'b0000;
                 endcase
-                byte_en_reg = 4'b1111;
+                byte_en_reg <= 4'b0000;
             end else begin
-                dmem_addr = 32'b0;
-                byte_en_dmem_reg = 4'b0000;
-                byte_en_reg = 4'b1111; 
+                dmem_addr <= 32'b0;
+
+                byte_en_dmem_reg <= 4'b0000;
+                byte_en_reg <= 4'b1111; 
             end
 
             MEM_WB_funct3 <= EX_MEM_funct3;
