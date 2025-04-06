@@ -10,7 +10,8 @@ module cpu(
     output reg        dmem_wen,
     output      [3:0] byte_en
 );
-    // --- Inline resolution of X bits using a generate block ---
+    // Used when reading from RAM, for when the memory being accessed is not yet populated
+    // Outputs 1 instead of X bits
     wire [31:0] fixed_data;
     genvar i;
     generate
@@ -18,6 +19,7 @@ module cpu(
             assign fixed_data[i] = (dmem_data[i] === 1'bx) ? 1'b1 : dmem_data[i];
         end
     endgenerate
+    //assign fixed_data = dmem_data;
 
     // Stall register
     reg stall;
@@ -54,6 +56,7 @@ module cpu(
     reg               MEM_WB_wen;
     reg [2:0]         MEM_WB_insn_type;
     reg [31:0]        MEM_WB_alu_result;
+    reg [31:0]        MEM_WB_ram_result;
 
     // dmem_data tri-state control:
     // dmem_data is driven by dmem_data_out when writing;
@@ -61,9 +64,11 @@ module cpu(
     reg [31:0] dmem_data_out;
     assign dmem_data = (dmem_wen) ? dmem_data_out : 32'hz;
     
-    // byte_en output and its internal register.
+    // byte_en output and its internal register. For RAM
+    reg [3:0] byte_en_dmem_reg;
+    assign byte_en = byte_en_dmem_reg;
+    // byte_en internal register. For regfile
     reg [3:0] byte_en_reg;
-    assign byte_en = byte_en_reg;
 
     // Clock Cycle Counter
     reg [15:0] cycle_counter;
@@ -169,6 +174,7 @@ module cpu(
         .source_reg1(ID_EX_src1),
         .source_reg2(ID_EX_src2),
         .write_data(MEM_WB_result),
+        .byte_en(byte_en_reg),
         .read_data1(reg_data1),
         .read_data2(reg_data2)
     );
@@ -256,46 +262,77 @@ module cpu(
             MEM_WB_wen    <= 1'b0;
             MEM_WB_insn_type <= 1'b0;
             dmem_wen <= 1'b0;
+            byte_en_dmem_reg = 4'b0;
             byte_en_reg = 4'b0;
         end else begin
             dmem_data_out = EX_MEM_store_data;
             if (EX_MEM_insn_type == 3'b011) begin 
                 dmem_addr = EX_MEM_alu_result; // Use the effective address computed in EX stage.
 
-                byte_en_reg = 4'b0000;
+                byte_en_dmem_reg = 4'b0000;
+
+                // When executing a load (insn_type == 3'b011), drive wen and set byte_en.
+                case (EX_MEM_funct3)
+                    3'b000: begin // LW (Load Byte)
+                        byte_en_reg = 4'b0001;
+                        //MEM_WB_alu_result <= EX_MEM_alu_result;
+                    end
+                    3'b001: begin // LH (Load Half Word)
+                        byte_en_reg = 4'b0011;
+                        //MEM_WB_alu_result <= EX_MEM_alu_result;
+                    end
+                    3'b010: begin // LW (Load Word)
+                        byte_en_reg = 4'b1111;
+                        //MEM_WB_alu_result <= EX_MEM_alu_result;
+                    end
+                    3'b100: begin // LBU (Load Byte Unsigned)
+                        byte_en_reg = 4'b0001;
+                        //MEM_WB_alu_result <= EX_MEM_alu_result;
+                    end
+                    3'b101: begin // LHU (Load Half Word Unsigned)
+                        byte_en_reg = 4'b0011;
+                        //MEM_WB_alu_result <= EX_MEM_alu_result;
+                    end
+
+                    default: byte_en_reg = 4'b0000;
+                endcase
+                
             end else if (EX_MEM_insn_type == 3'b010) begin
                 dmem_addr = EX_MEM_alu_result; // Use the effective address computed in EX stage.
-                // When executing a store (insn_type == 3'b010), drive dmem_wen and set byte_en.
+                // When executing a store (insn_type == 3'b010), drive dmem_wen and set byte_en_dmem.
                 case (EX_MEM_funct3)
                     3'b000: begin // SB (Store Byte)
                         case (EX_MEM_alu_result[1:0])
-                            2'b00: byte_en_reg = 4'b0001;
-                            2'b01: byte_en_reg = 4'b0010;
-                            2'b10: byte_en_reg = 4'b0100;
-                            2'b11: byte_en_reg = 4'b1000;
-                            default: byte_en_reg = 4'b0000;
+                            2'b00: byte_en_dmem_reg = 4'b0001;
+                            2'b01: byte_en_dmem_reg = 4'b0010;
+                            2'b10: byte_en_dmem_reg = 4'b0100;
+                            2'b11: byte_en_dmem_reg = 4'b1000;
+                            default: byte_en_dmem_reg = 4'b0000;
                         endcase
                     end
                     3'b001: begin // SH (Store Halfword)
                         case (EX_MEM_alu_result[1:0])
-                            2'b00: byte_en_reg = 4'b0011; // bytes 0 and 1
-                            2'b01: byte_en_reg = 4'b0110; // example: bytes 1 and 2
-                            2'b10: byte_en_reg = 4'b1100; // bytes 2 and 3
-                            2'b11: byte_en_reg = 4'b1010; // example: wrap-around (if allowed)
-                            default: byte_en_reg = 4'b0000;
+                            2'b00: byte_en_dmem_reg = 4'b0011; // bytes 0 and 1
+                            2'b01: byte_en_dmem_reg = 4'b0110; // example: bytes 1 and 2
+                            2'b10: byte_en_dmem_reg = 4'b1100; // bytes 2 and 3
+                            2'b11: byte_en_dmem_reg = 4'b1010; // example: wrap-around (if allowed)
+                            default: byte_en_dmem_reg = 4'b0000;
                         endcase
                     end
                     3'b010: begin // SW (Store Word)
-                        byte_en_reg = 4'b1111;
+                        byte_en_dmem_reg = 4'b1111;
                     end
-                    default: byte_en_reg = 4'b0000;
+                    default: byte_en_dmem_reg = 4'b0000;
                 endcase
+                byte_en_reg = 4'b0000;
+                MEM_WB_alu_result <= EX_MEM_alu_result;
             end else begin
                 dmem_addr = 32'b0;
-                byte_en_reg = 4'b0000;
+                byte_en_dmem_reg = 4'b0000;
+                byte_en_reg = 4'b1111;
+                MEM_WB_alu_result <= EX_MEM_alu_result;
             end
 
-            MEM_WB_alu_result <= EX_MEM_alu_result;
             MEM_WB_dest <= EX_MEM_dest;
             MEM_WB_wen  <= EX_MEM_wen;
             MEM_WB_insn_type <= EX_MEM_insn_type;
