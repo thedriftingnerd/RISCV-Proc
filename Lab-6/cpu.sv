@@ -38,6 +38,7 @@ module cpu(
     reg [2:0]  EX_MEM_insn_type;  // distinguishes load (3'b011) vs. store (3'b010)
     reg [2:0]  EX_MEM_funct3;
     reg [31:0] EX_MEM_store_data; // Propagated store data
+    reg        ram_forward_flag;
     
     // MEM/WB pipeline registers
     reg signed [31:0] MEM_WB_result;
@@ -170,29 +171,17 @@ module cpu(
     );
 
     // Forwarding Logic
-    reg [31:0] forwarded_op1;
-    reg [31:0] forwarded_op2;
-    reg ram_forward_flag;
-    always @(*) begin
-        forwarded_op1 = reg_data1;
-        forwarded_op2 = reg_data2;
+    wire [31:0] forwarded_op1;
+    wire [31:0] forwarded_op2;
 
-        // Register "skips" for when the requested data is not yet written to reg.
-        if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src1) && EX_MEM_wen) begin
-            forwarded_op1 = EX_MEM_alu_result;
-        end else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src1) && MEM_WB_wen) begin
-            forwarded_op1 = MEM_WB_result;
-        end
-
-        if ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src2) && EX_MEM_wen) begin 
-            forwarded_op2 = EX_MEM_alu_result;
-        end else if ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src2) && MEM_WB_wen) begin
-            forwarded_op2 = MEM_WB_result;
-        end
-
-        if (ID_EX_alu_op_mux)
-            forwarded_op2 = ID_EX_imm;
-    end
+    // Register "skips" for when the requested data is not yet written to reg.
+    assign forwarded_op1 = ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src1) && EX_MEM_wen) ? EX_MEM_alu_result :
+                            ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src1) && MEM_WB_wen) ? MEM_WB_result :
+                            reg_data1;
+    assign forwarded_op2 = (ID_EX_alu_op_mux) ? ID_EX_imm :
+                            ((EX_MEM_dest != 5'b0) && (EX_MEM_dest == ID_EX_src2) && EX_MEM_wen) ? EX_MEM_alu_result :
+                            ((MEM_WB_dest != 5'b0) && (MEM_WB_dest == ID_EX_src2) && MEM_WB_wen) ? MEM_WB_result :
+                            reg_data2;
 
     // Execute Stage: ALU instance.
     wire [31:0] alu_result;
