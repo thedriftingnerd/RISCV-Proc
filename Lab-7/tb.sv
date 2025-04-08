@@ -58,7 +58,7 @@ imem (
 .data(imem_insn)
 );
 
-ram #( .addr_width (address_size), .data_width (word_size), .init_file ("dummy.dat") )
+ram #( .addr_width (address_size), .data_width (word_size), .init_file ("dmem.dat") )
 dmem (
 .rst_n (rst_n),
 .clk (clk),

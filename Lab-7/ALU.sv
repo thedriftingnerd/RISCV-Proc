@@ -1,4 +1,3 @@
-// Modified ALU Module
 module ALU(
     input [31:0] op1,
     input [31:0] op2,
@@ -55,24 +54,23 @@ module ALU(
                     default: result = 32'b0;
                 endcase
             end
-            // S-type (Store): effective address = base + offset
-            3'b010: begin
+            // S-type (store) and Load: effective address = base + offset.
+            3'b010, 3'b011: begin
                 result = op1 + op2;
             end
-            // Load: effective address = base + offset
-            3'b011: begin
+            // U-type
+            3'b100: begin
                 result = op1 + op2;
             end
-            // J-type: Jump (JAL/JALR) -- compute jump target address = base + offset.
-            // For JAL, op1 is forced to be the PC (handled externally).
+            // J-type (jump): target address = base + offset.
             3'b101: begin
                 result = op1 + op2;
             end
-            // B-type: Branch -- compute branch target address = PC + offset.
+            // B-type (branch): target address = PC + offset.
             3'b110: begin
                 result = op1 + op2;
             end
-            // Default: return zero
+            // Default: result = 0.
             default: result = 32'b0;
         endcase
     end

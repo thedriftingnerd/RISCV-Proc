@@ -1,171 +1,178 @@
-// Instruction Decoder Module
 module instruction_decoder(
     input [31:0] imem_insn,
-    output reg [4:0] destination_reg,
-    output reg [2:0] funct3,
-    output reg [4:0] source_reg1,
-    output reg [4:0] source_reg2,
-    output reg [11:0] imm,
-   	output reg [6:0] funct7,
-    output reg [4:0] shamt,
-    output reg [2:0] insn_type,
-    output reg alu_op_mux,
-    output reg wen,
-    output reg dmem_wen
+    output reg [4:0]  destination_reg,
+    output reg [2:0]  funct3,
+    output reg [4:0]  source_reg1,
+    output reg [4:0]  source_reg2,
+    output reg [31:0] imm,         // 32-bit full immediate (after shift/sign-extension where needed)
+    output reg [6:0]  funct7,
+    output reg [4:0]  shamt,
+    output reg [2:0]  insn_type,   // 000: I-type, 001: R-type, 010: S-type, 011: Load,
+                                   // 100: U-type, 101: J-type, 110: Branch, 111: Default/NOP
+    output reg        alu_op_mux,
+    output reg        wen,
+    output reg        dmem_wen
 );
 
   always @ (*) begin
       case (imem_insn[6:0])
-        7'b0010011: begin //I type instruction
-          insn_type = 3'b000;
+        // I-type instructions (e.g. ADDI, SLTI, ...)
+        7'b0010011: begin
+          insn_type       = 3'b000;
           destination_reg = imem_insn[11:7];
-          funct3 = imem_insn[14:12];
-          source_reg1 = imem_insn[19:15];
-          source_reg2 = 0;
-          imm = imem_insn[31:20];
-          funct7 = imem_insn[31:25];
-          shamt = imem_insn[24:20]; 
-          alu_op_mux = 1;
-          wen = 1;
-          dmem_wen = 0;
+          funct3          = imem_insn[14:12];
+          source_reg1     = imem_insn[19:15];
+          source_reg2     = 5'b0;
+          imm             = {{20{imem_insn[31]}}, imem_insn[31:20]};
+          funct7          = imem_insn[31:25];
+          shamt           = imem_insn[24:20];
+          alu_op_mux      = 1'b1;
+          wen             = 1'b1;
+          dmem_wen        = 1'b0;
         end
-        7'b0110011: begin //R type instruction
-          insn_type = 3'b001;
+
+        // R-type instructions (e.g. ADD, SUB, ...)
+        7'b0110011: begin
+          insn_type       = 3'b001;
           destination_reg = imem_insn[11:7];
-          funct3 = imem_insn[14:12];
-          source_reg1 = imem_insn[19:15];
-          source_reg2 = imem_insn[24:20];
-          funct7 = imem_insn[31:25];
-          imm = 0;
-          shamt = 0;
-          alu_op_mux = 0;
-          wen = 1;
-          dmem_wen = 0;
+          funct3          = imem_insn[14:12];
+          source_reg1     = imem_insn[19:15];
+          source_reg2     = imem_insn[24:20];
+          funct7          = imem_insn[31:25];
+          imm             = 32'b0;
+          shamt           = 5'b0;
+          alu_op_mux      = 1'b0;
+          wen             = 1'b1;
+          dmem_wen        = 1'b0;
         end
-        7'b0100011: begin // Store type Load-Store
-          insn_type = 3'b010;
-          destination_reg = 0;
-          imm[4:0] = imem_insn[11:7];
-          funct3 = imem_insn[14:12];
-          source_reg1 = imem_insn[19:15];
-          source_reg2 = imem_insn[24:20];
-          imm[11:5] = imem_insn[31:25];
-          funct7 = 0;
-          shamt = 0; 
-          alu_op_mux = 1;
-          wen = 0;
-          dmem_wen = 1;
+
+        // S-type instructions (Store instructions: e.g. SW)
+        7'b0100011: begin
+          insn_type       = 3'b010;
+          destination_reg = 5'b0;
+          funct3          = imem_insn[14:12];
+          source_reg1     = imem_insn[19:15];
+          source_reg2     = imem_insn[24:20];
+          // Construct immediate from imm[11:5] and imm[4:0].
+          imm             = {{20{imem_insn[31]}}, imem_insn[31:25], imem_insn[11:7]};
+          funct7          = 7'b0;
+          shamt           = 5'b0; 
+          alu_op_mux      = 1'b1;
+          wen             = 1'b0;
+          dmem_wen        = 1'b1;
         end
-        7'b0000011: begin // Load type Load-Store
-          insn_type = 3'b011;
+
+        // Load instructions (e.g. LW)
+        7'b0000011: begin
+          insn_type       = 3'b011;
           destination_reg = imem_insn[11:7];
-          funct3 = imem_insn[14:12];
-          source_reg1 = imem_insn[19:15];
-          source_reg2 = 5'b0;
-          imm[11:0] = imem_insn[31:20];
-          funct7 = 0;
-          shamt = 0; 
-          alu_op_mux = 1;
-          wen = 1;
-          dmem_wen = 0;
+          funct3          = imem_insn[14:12];
+          source_reg1     = imem_insn[19:15];
+          source_reg2     = 5'b0;
+          imm             = {{20{imem_insn[31]}}, imem_insn[31:20]};
+          funct7          = 7'b0;
+          shamt           = 5'b0; 
+          alu_op_mux      = 1'b1;
+          wen             = 1'b1;
+          dmem_wen        = 1'b0;
         end
-        7'b0110111: begin // U-type instructions: LUI
-          insn_type       = 3'b100; // U-type
+
+        // U-type instructions: LUI
+        7'b0110111: begin
+          insn_type       = 3'b100;
           destination_reg = imem_insn[11:7];
-          funct3          = 3'b000; // not used
-          source_reg1     = 0;
-          source_reg2     = 0;
-          // Immediate: take bits [31:12] and shift left 12 bits
+          funct3          = 3'b0; // not used
+          source_reg1     = 5'b0;
+          source_reg2     = 5'b0;
+          // Immediate is bits [31:12] shifted left by 12.
           imm             = {imem_insn[31:12], 12'b0};
-          funct7          = 0;
-          shamt           = 0;
-          alu_op_mux      = 1;
-          wen             = 1;
-          dmem_wen        = 0;
+          funct7          = 7'b0;
+          shamt           = 5'b0;
+          alu_op_mux      = 1'b1;
+          wen             = 1'b1;
+          dmem_wen        = 1'b0;
         end
-        7'b0010111: begin // U-type instructions: AUIPC
-          insn_type       = 3'b100; // U-type
+
+        // U-type instructions: AUIPC
+        7'b0010111: begin
+          insn_type       = 3'b100;
           destination_reg = imem_insn[11:7];
-          funct3          = 3'b000; // not used
-          source_reg1     = 0;
-          source_reg2     = 0;
-          // Immediate: bits [31:12] shifted left 12 bits (to be added to PC)
+          funct3          = 3'b0; // not used
+          source_reg1     = 5'b0;
+          source_reg2     = 5'b0;
           imm             = {imem_insn[31:12], 12'b0};
-          funct7          = 0;
-          shamt           = 0;
-          alu_op_mux      = 1;
-          wen             = 1;
-          dmem_wen        = 0;
+          funct7          = 7'b0;
+          shamt           = 5'b0;
+          alu_op_mux      = 1'b1;
+          wen             = 1'b1;
+          dmem_wen        = 1'b0;
         end
-        7'b1101111: begin // J-type instruction: JAL
-          insn_type       = 3'b101; // J-type
+
+        // J-type instruction: JAL
+        7'b1101111: begin
+          insn_type       = 3'b101;
           destination_reg = imem_insn[11:7];
-          funct3          = 3'b000; // not used
-          source_reg1     = 0;
-          source_reg2     = 0;
-          // Assemble immediate from scattered bits:
-          // imm[20]    = imem_insn[31]
-          // imm[10:1]  = imem_insn[30:21]
-          // imm[11]    = imem_insn[20]
-          // imm[19:12] = imem_insn[19:12]
-          // LSB is 0
+          funct3          = 3'b0; // not used
+          source_reg1     = 5'b0;
+          source_reg2     = 5'b0;
+          // Assemble immediate: imm[20|10:1|11|19:12] with a 0 as LSB.
           imm             = {{11{imem_insn[31]}}, imem_insn[31],
                              imem_insn[19:12], imem_insn[20],
                              imem_insn[30:21], 1'b0};
-          funct7          = 0;
-          shamt           = 0;
-          alu_op_mux      = 1;
-          wen             = 1;  // writes the return address into rd
-          dmem_wen        = 0;
+          funct7          = 7'b0;
+          shamt           = 5'b0;
+          alu_op_mux      = 1'b1;
+          wen             = 1'b1;  // Write return address (PC+4) into rd.
+          dmem_wen        = 1'b0;
         end
-        7'b1100111: begin // J-type instruction: JALR (I-type format, but used for jumps)
-          insn_type       = 3'b101; // J-type jump
+
+        // J-type instruction: JALR (I-type format)
+        7'b1100111: begin
+          insn_type       = 3'b101;
           destination_reg = imem_insn[11:7];
           funct3          = imem_insn[14:12]; // should be 000
           source_reg1     = imem_insn[19:15];
-          source_reg2     = 0;
-          // Sign-extend 12-bit immediate
+          source_reg2     = 5'b0;
           imm             = {{20{imem_insn[31]}}, imem_insn[31:20]};
-          funct7          = 0;
-          shamt           = 0;
-          alu_op_mux      = 1;
-          wen             = 1;  // writes the return address into rd
-          dmem_wen        = 0;
+          funct7          = 7'b0;
+          shamt           = 5'b0;
+          alu_op_mux      = 1'b1;
+          wen             = 1'b1;
+          dmem_wen        = 1'b0;
         end
-        7'b1100011: begin // B-type instructions: Branches (BEQ, BNE, BLT, etc.)
-          insn_type       = 3'b110; // Branch type
-          destination_reg = 0;        // no rd for branches
-          funct3          = imem_insn[14:12]; // determines branch type
+
+        // B-type instructions: Branches (BEQ, BNE, BLT, BGE, BLTU, BGEU)
+        7'b1100011: begin
+          insn_type       = 3'b110;
+          destination_reg = 5'b0;
+          funct3          = imem_insn[14:12];
           source_reg1     = imem_insn[19:15];
           source_reg2     = imem_insn[24:20];
-          // Assemble branch immediate from bits:
-          // imm[12]   = imem_insn[31]
-          // imm[10:5] = imem_insn[30:25]
-          // imm[4:1]  = imem_insn[11:8]
-          // imm[11]   = imem_insn[7]
-          // LSB is 0
+          // Assemble branch immediate: imm[12|10:5|4:1|11] with 0 as LSB.
           imm             = {{19{imem_insn[31]}}, imem_insn[31],
                              imem_insn[7], imem_insn[30:25],
                              imem_insn[11:8], 1'b0};
-          funct7          = 0;
-          shamt           = 0;
-          alu_op_mux      = 1;
-          wen             = 0;
-          dmem_wen        = 0;
+          funct7          = 7'b0;
+          shamt           = 5'b0;
+          alu_op_mux      = 1'b1;
+          wen             = 1'b0;
+          dmem_wen        = 1'b0;
         end
+
+        // Default case: Unknown instruction -> NOP.
         default: begin
-          insn_type = 3'b111;
-          destination_reg = 0;
-          funct3 = 0;
-          source_reg1 = 0;
-          source_reg2 = 0;
-          imm = 0;
-          funct7 = 0;
-          shamt = 0;
-          alu_op_mux = 0;
-          wen = 0;
-          dmem_wen = 0;
+          insn_type       = 3'b111;
+          destination_reg = 5'b0;
+          funct3          = 3'b0;
+          source_reg1     = 5'b0;
+          source_reg2     = 5'b0;
+          imm             = 32'b0;
+          funct7          = 7'b0;
+          shamt           = 5'b0;
+          alu_op_mux      = 1'b0;
+          wen             = 1'b0;
+          dmem_wen        = 1'b0;
         end
       endcase
     end
-  endmodule
+endmodule
