@@ -121,7 +121,7 @@ module instruction_decoder(
                              imem_insn[30:21], 1'b0};
           funct7          = 7'b0;
           shamt           = 5'b0;
-          alu_op_mux      = 1'b1;
+          alu_op_mux      = 1'b0;
           wen             = 1'b1;  // Write return address (PC+4) into rd.
           dmem_wen        = 1'b0;
         end
@@ -136,7 +136,7 @@ module instruction_decoder(
           imm             = {{20{imem_insn[31]}}, imem_insn[31:20]};
           funct7          = 7'b0;
           shamt           = 5'b0;
-          alu_op_mux      = 1'b1;
+          alu_op_mux      = 1'b0;
           wen             = 1'b1;
           dmem_wen        = 1'b0;
         end
@@ -154,7 +154,7 @@ module instruction_decoder(
                              imem_insn[11:8], 1'b0};
           funct7          = 7'b0;
           shamt           = 5'b0;
-          alu_op_mux      = 1'b1;
+          alu_op_mux      = 1'b0;
           wen             = 1'b0;
           dmem_wen        = 1'b0;
         end
@@ -170,7 +170,7 @@ module instruction_decoder(
           funct7          = 7'b0;
           shamt           = 5'b0;
           alu_op_mux      = 1'b0;
-          wen             = 1'b0;
+          wen             = 1'b1;
           dmem_wen        = 1'b0;
         end
       endcase

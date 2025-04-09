@@ -1,4 +1,3 @@
-// Updated Program Counter Module with Branch/Jump Override
 module PC(
     input         rst_n,
     input         clk,

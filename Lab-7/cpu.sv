@@ -87,7 +87,7 @@ module cpu(
         .clk(clk),
         .stall(stall),
         .branch_jump(branch_jump),
-        .new_pc(new_pc),
+        .new_pc(branch_target),
         .pc(pc)
     );
     
@@ -100,21 +100,17 @@ module cpu(
     // registers are flushed in the next clock cycle.
     //-------------------------------------------------------
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n)
+        if ((!rst_n) | flush_pipeline)
             flush_pipeline <= 1'b0;
         else
             flush_pipeline <= branch_jump;
     end
 
     //-------------------------------------------------------
-    // Instruction Fetch (IF) Stage with Flush Logic
+    // Instruction Fetch (IF) Stage
     //-------------------------------------------------------
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
-            IF_ID_insn <= 32'b0;
-            IF_ID_pc   <= 32'b0;
-        end else if (flush_pipeline) begin
-            // Flush the pipeline by inserting a NOP (all zeros)
+        if ((!rst_n) | branch_taken) begin // Do not grab next insn if we are about to jump!
             IF_ID_insn <= 32'b0;
             IF_ID_pc   <= 32'b0;
         end else begin
@@ -157,10 +153,9 @@ module cpu(
 
     //-------------------------------------------------------
     // ID/EX Pipeline Register Update
-    // (If IF/ID is flushed, the decoder outputs a NOP.)
     //-------------------------------------------------------
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+        if (!rst_n | branch_jump) begin
             ID_EX_pc         <= 32'b0;
             ID_EX_dest       <= 5'b0;
             ID_EX_src1       <= 5'b0;
@@ -250,7 +245,9 @@ module cpu(
     wire branch_taken;
     wire [31:0] branch_target;
 
-    assign branch_taken = (ID_EX_insn_type == 3'b110) ?
+    assign branch_taken = (flush_pipeline) ? 1'b0 : // cant jump during a flush
+        (ID_EX_insn_type == 3'b101) ? 1'b1 : // JAL
+        (ID_EX_insn_type == 3'b110) ?
         ((ID_EX_funct3 == 3'b000) ? (forwarded_op1 == forwarded_op2) :  // BEQ
         (ID_EX_funct3 == 3'b001) ? (forwarded_op1 != forwarded_op2) :  // BNE
         (ID_EX_funct3 == 3'b100) ? ($signed(forwarded_op1) < $signed(forwarded_op2)) :  // BLT
@@ -267,15 +264,13 @@ module cpu(
     // For jumps (insn_type 3'b101) the branch is unconditional.
     // For branches (insn_type 3'b110) use branch_taken.
     //-------------------------------------------------------
-    assign branch_jump = ((ID_EX_insn_type == 3'b101) || ((ID_EX_insn_type == 3'b110) && branch_taken));
-    // For jump instructions, use the ALU result as target; for branch instructions, use branch_target.
-    assign new_pc = (ID_EX_insn_type == 3'b101) ? alu_result : branch_target;
+    assign branch_jump = (((ID_EX_insn_type == 3'b101) || ((ID_EX_insn_type == 3'b110) && branch_taken)) && (!flush_pipeline));
 
     //-------------------------------------------------------
     // EX/MEM Pipeline Register Update
     //-------------------------------------------------------
     always @(posedge clk or negedge rst_n) begin
-        if (!rst_n) begin
+        if ((!rst_n) | branch_jump) begin
             EX_MEM_alu_result <= 32'b0;
             EX_MEM_dest       <= 5'b0;
             EX_MEM_wen        <= 1'b0;
